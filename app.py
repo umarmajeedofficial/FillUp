@@ -33,7 +33,7 @@ whisper_pipe = pipeline(
 )
 
 # Setup FLAN-T5 model and tokenizer
-flan_t5_model_id = "google/flan-t5-large"
+flan_t5_model_id = "google-t5/t5-base"
 
 try:
     flan_t5_tokenizer = T5Tokenizer.from_pretrained(flan_t5_model_id)
