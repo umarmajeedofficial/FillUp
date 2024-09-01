@@ -1,6 +1,8 @@
-streamlit
-transformers
 torch
+transformers
 pdfplumber
 reportlab
-sentencepiece
+streamlit
+numpy
+scipy
+soundfile
