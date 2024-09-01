@@ -1,59 +1,59 @@
-import streamlit as st
+import os
+import warnings
 import torch
-from transformers import T5Tokenizer, T5ForConditionalGeneration, AutoModelForSpeechSeq2Seq, AutoProcessor
+import io
+from transformers import T5Tokenizer, T5ForConditionalGeneration, pipeline, AutoModelForSpeechSeq2Seq, AutoProcessor
 import pdfplumber
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-import io
+import streamlit as st
 
-# Function to load models
-def load_models():
-    try:
-        flan_t5_model_id = "google/flan-t5-large"
-        whisper_model_id = "openai/whisper-medium"
+# Suppress warnings globally
+warnings.filterwarnings("ignore")
 
-        flan_t5_tokenizer = T5Tokenizer.from_pretrained(flan_t5_model_id)
-        flan_t5_model = T5ForConditionalGeneration.from_pretrained(flan_t5_model_id)
-        
-        whisper_model = AutoModelForSpeechSeq2Seq.from_pretrained(whisper_model_id)
-        whisper_processor = AutoProcessor.from_pretrained(whisper_model_id)
-        
-        return flan_t5_tokenizer, flan_t5_model, whisper_model, whisper_processor
-    except ImportError as e:
-        st.error(f"Error loading models: {e}")
-        st.stop()
+# Setup models
+device = "cuda:0" if torch.cuda.is_available() else "cpu"
+whisper_model_id = "openai/whisper-medium"
 
-# Load models
-flan_t5_tokenizer, flan_t5_model, whisper_model, whisper_processor = load_models()
+# Load Whisper model and processor
+whisper_model = AutoModelForSpeechSeq2Seq.from_pretrained(whisper_model_id)
+whisper_processor = AutoProcessor.from_pretrained(whisper_model_id)
+
+# Create Whisper pipeline
+whisper_pipe = pipeline(
+    "automatic-speech-recognition",
+    model=whisper_model,
+    tokenizer=whisper_processor.tokenizer,
+    feature_extractor=whisper_processor.feature_extractor,
+    device=device
+)
+
+# Setup FLAN-T5 model and tokenizer
+flan_t5_model_id = "google/flan-t5-large"
+flan_t5_tokenizer = T5Tokenizer.from_pretrained(flan_t5_model_id)
+flan_t5_model = T5ForConditionalGeneration.from_pretrained(flan_t5_model_id)
 
 # Function to transcribe audio files
-def transcribe_audio(file):
-    audio_file = io.BytesIO(file.read())
-    whisper_pipe = pipeline(
-        "automatic-speech-recognition",
-        model=whisper_model,
-        tokenizer=whisper_processor.tokenizer,
-        feature_extractor=whisper_processor.feature_extractor,
-        device=device
-    )
-    result = whisper_pipe(audio_file)
+def transcribe_audio(audio_file):
+    with io.BytesIO(audio_file.read()) as file:
+        result = whisper_pipe(file)
     return result['text']
 
 # Function to extract text and questions from PDF
 def extract_text_from_pdf(pdf_file):
     text = ""
     questions = []
-    pdf = pdfplumber.open(pdf_file)
-    for page in pdf.pages:
-        page_text = page.extract_text()
-        if page_text:
-            text += page_text
-            # Extract questions based on numbering
-            lines = page_text.split("\n")
-            for line in lines:
-                if line.strip() and line.strip()[0].isdigit():
-                    questions.append(line.strip())
+    with pdfplumber.open(pdf_file) as pdf:
+        for page in pdf.pages:
+            page_text = page.extract_text()
+            if page_text:
+                text += page_text
+                # Extract questions based on numbering
+                lines = page_text.split("\n")
+                for line in lines:
+                    if line.strip() and line.strip()[0].isdigit():
+                        questions.append(line.strip())
     return text, questions
 
 # Function to generate form data with FLAN-T5
@@ -87,8 +87,9 @@ def generate_form_data(text, questions):
     return "\n\n".join(responses)
 
 # Function to save responses to PDF
-def save_responses_to_pdf(responses, output_pdf):
-    document = SimpleDocTemplate(output_pdf, pagesize=letter)
+def save_responses_to_pdf(responses):
+    output_pdf_path = "/tmp/response_output.pdf"  # Temporary path for the PDF
+    document = SimpleDocTemplate(output_pdf_path, pagesize=letter)
     styles = getSampleStyleSheet()
 
     # Custom style for responses
@@ -111,39 +112,41 @@ def save_responses_to_pdf(responses, output_pdf):
         content.append(Spacer(1, 18))  # Space between responses
 
     document.build(content)
+    return output_pdf_path
 
 # Streamlit UI
 st.title("FillUp by Umar Majeed")
 
-# Upload multiple audio files
+# Upload audio files
 audio_files = st.file_uploader("Upload multiple audio files", type=["wav", "mp3"], accept_multiple_files=True)
 
 # Upload PDF file
 pdf_file = st.file_uploader("Upload a PDF file", type="pdf")
 
 if st.button("Process"):
-    if not audio_files or not pdf_file:
-        st.error("Please upload both audio and PDF files.")
-    else:
-        # Process PDF
-        pdf_text, pdf_questions = extract_text_from_pdf(pdf_file)
-
-        # Process audio files
+    if audio_files and pdf_file:
         responses = []
+        pdf_text, pdf_questions = extract_text_from_pdf(pdf_file)
+        
         for audio_file in audio_files:
             # Transcribe audio
             transcribed_text = transcribe_audio(audio_file)
-
             # Generate form data
             form_data = generate_form_data(transcribed_text, pdf_questions)
             responses.append(form_data)
+            st.write(f"File {len(responses)}:\n{form_data}\n")  # Print the extracted form data with numbering
+        
+        # Save all responses to a PDF
+        output_pdf_path = save_responses_to_pdf(responses)
+        st.write("Responses have been generated. You can download the result below.")
 
-        # Show results
-        st.write("### Results")
-        st.write("\n\n".join(responses))
-
-        # Save results to PDF and offer download
-        output_pdf = io.BytesIO()
-        save_responses_to_pdf(responses, output_pdf)
-        output_pdf.seek(0)
-        st.download_button("Download Results as PDF", output_pdf, file_name="responses.pdf")
+        # Provide download link for the generated PDF
+        with open(output_pdf_path, "rb") as file:
+            st.download_button(
+                label="Download PDF",
+                data=file,
+                file_name="response_output.pdf",
+                mime="application/pdf"
+            )
+    else:
+        st.error("Please upload both audio files and a PDF file.")
