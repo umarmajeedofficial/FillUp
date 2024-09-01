@@ -1,9 +1,6 @@
-torch
 transformers
+torch
+gradio
 pdfplumber
 reportlab
-streamlit
-numpy
-scipy
-soundfile
 sentencepiece
