@@ -1,15 +1,15 @@
 import os
 import warnings
 import torch
+import soundfile as sf
 from transformers import T5Tokenizer, T5ForConditionalGeneration, pipeline, AutoModelForSpeechSeq2Seq, AutoProcessor
 import pdfplumber
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 import streamlit as st
-import numpy as np
 import io
-import soundfile as sf
+import numpy as np
 
 # Suppress warnings globally
 warnings.filterwarnings("ignore")
@@ -47,8 +47,10 @@ except Exception as e:
 # Function to transcribe audio files
 def transcribe_audio(audio_file):
     try:
-        with io.BytesIO(audio_file.read()) as file:
-            audio_data, sample_rate = sf.read(file, format='mp3') if audio_file.type == 'audio/mpeg' else sf.read(file)
+        # Read the audio file
+        audio_data, sample_rate = sf.read(audio_file)
+        
+        # Process the audio with Whisper model
         inputs = whisper_processor(audio_data, sampling_rate=sample_rate, return_tensors="pt")
         result = whisper_pipe(inputs)
         return result['text']
