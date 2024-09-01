@@ -33,8 +33,16 @@ whisper_pipe = pipeline(
 
 # Setup FLAN-T5 model and tokenizer
 flan_t5_model_id = "google/flan-t5-large"
-flan_t5_tokenizer = T5Tokenizer.from_pretrained(flan_t5_model_id)
-flan_t5_model = T5ForConditionalGeneration.from_pretrained(flan_t5_model_id)
+
+try:
+    flan_t5_tokenizer = T5Tokenizer.from_pretrained(flan_t5_model_id)
+    flan_t5_model = T5ForConditionalGeneration.from_pretrained(flan_t5_model_id)
+except ImportError as e:
+    st.error(f"ImportError: {e}")
+    st.stop()
+except Exception as e:
+    st.error(f"An error occurred while loading models: {e}")
+    st.stop()
 
 # Function to transcribe audio files
 def transcribe_audio(audio_file):
@@ -52,15 +60,18 @@ def transcribe_audio(audio_file):
 def extract_text_from_pdf(pdf_file):
     text = ""
     questions = []
-    with pdfplumber.open(pdf_file) as pdf:
-        for page in pdf.pages:
-            page_text = page.extract_text()
-            if page_text:
-                text += page_text
-                lines = page_text.split("\n")
-                for line in lines:
-                    if line.strip() and line.strip()[0].isdigit():
-                        questions.append(line.strip())
+    try:
+        with pdfplumber.open(pdf_file) as pdf:
+            for page in pdf.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text += page_text
+                    lines = page_text.split("\n")
+                    for line in lines:
+                        if line.strip() and line.strip()[0].isdigit():
+                            questions.append(line.strip())
+    except Exception as e:
+        st.error(f"Error extracting text from PDF: {e}")
     return text, questions
 
 # Function to generate form data with FLAN-T5
