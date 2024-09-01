@@ -2,6 +2,7 @@ import os
 import warnings
 import torch
 import soundfile as sf
+from scipy.signal import resample
 from transformers import T5Tokenizer, T5ForConditionalGeneration, pipeline, AutoModelForSpeechSeq2Seq, AutoProcessor
 import pdfplumber
 from reportlab.lib.pagesizes import letter
@@ -44,14 +45,24 @@ except Exception as e:
     st.error(f"An error occurred while loading models: {e}")
     st.stop()
 
+# Function to resample audio to 16000 Hz
+def resample_audio(audio_data, original_sample_rate, target_sample_rate=16000):
+    num_samples = int(len(audio_data) * float(target_sample_rate) / original_sample_rate)
+    resampled_audio = resample(audio_data, num_samples)
+    return resampled_audio
+
 # Function to transcribe audio files
 def transcribe_audio(audio_file):
     try:
         # Read the audio file
         audio_data, sample_rate = sf.read(audio_file)
-        
+
+        # Resample if necessary
+        if sample_rate != 16000:
+            audio_data = resample_audio(audio_data, sample_rate, 16000)
+
         # Process the audio with Whisper model
-        inputs = whisper_processor(audio_data, sampling_rate=sample_rate, return_tensors="pt")
+        inputs = whisper_processor(audio_data, sampling_rate=16000, return_tensors="pt")
         result = whisper_pipe(inputs)
         return result['text']
     except Exception as e:
