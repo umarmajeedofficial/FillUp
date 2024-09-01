@@ -32,8 +32,8 @@ whisper_pipe = pipeline(
     device=device
 )
 
-# Setup FLAN-T5 model and tokenizer
-flan_t5_model_id = "google-t5/t5-base"
+# Setup T5-Base model and tokenizer
+flan_t5_model_id = "t5-base"
 
 try:
     flan_t5_tokenizer = T5Tokenizer.from_pretrained(flan_t5_model_id)
@@ -87,7 +87,7 @@ def extract_text_from_pdf(pdf_file):
         st.error(f"Error extracting text from PDF: {e}")
     return text, questions
 
-# Function to generate form data with FLAN-T5
+# Function to generate form data with T5-Base
 def generate_form_data(text, questions):
     responses = []
     for question in questions:
